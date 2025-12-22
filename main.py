@@ -67,6 +67,27 @@ def get_user_name(tg_id: int) -> str | None:
     return row[0] if row else None
 
 # ================= HANDLERS =================
+
+def _save_plus(update: Update, context: ContextTypes.DEFAULT_TYPE, reason: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO pluses (from_id, to_id, reason) VALUES (?, ?, ?)",
+        (
+            update.effective_user.id,
+            context.user_data["plus_to"],
+            reason,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    context.user_data.clear()
+    update.callback_query.message.reply_text(
+        "✅ Плюсик успешно добавлен!", reply_markup=main_menu()
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
     name = get_user_name(tg_id)
@@ -105,11 +126,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ===== Ввод причины плюсика =====
-    if context.user_data.get("awaiting_reason"):
+    # ===== Ввод кастомной причины =====
+    if context.user_data.get("awaiting_custom_reason"):
         if len(text) < 3:
             await update.message.reply_text("Опиши причину чуть подробнее 🙂")
             return
+
+        reason = f"Другое: {text}"
+        _save_plus(update, context, reason)
+        return
 
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -176,6 +201,21 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
         context.user_data["plus_to"] = to_id
+
+        keyboard = [
+            [InlineKeyboardButton("За интеграцию новых коллег в МЛА+", callback_data="reason_integr")],
+            [InlineKeyboardButton("За профессиональный совет", callback_data="reason_advice")],
+            [InlineKeyboardButton("За заботу об офисе", callback_data="reason_care")],
+            [InlineKeyboardButton("Другое", callback_data="reason_other")],
+        ]
+
+        await query.message.reply_text(
+            "За что ставим плюсик?", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+        context.user_data.clear()
+        context.user_data["plus_to"] = to_id
         context.user_data["awaiting_reason"] = True
 
         await query.message.reply_text("✍️ За что этот плюсик?")
@@ -188,7 +228,13 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute(
-            "SELECT reason FROM pluses WHERE to_id = ? ORDER BY created_at DESC",
+            """
+            SELECT p.reason, u.name
+            FROM pluses p
+            JOIN users u ON u.tg_id = p.from_id
+            WHERE p.to_id = ?
+            ORDER BY p.created_at DESC
+            """,
             (tg_id,),
         )
         rows = c.fetchall()
@@ -197,8 +243,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not rows:
             text = "У тебя пока нет плюсиков 🙂"
         else:
-            reasons = "\n".join(f"• {r[0]}" for r in rows)
-            text = f"🌟 Твои плюсики ({len(rows)}):\n{reasons}"
+            lines = [f"• {reason} — от {name}" for reason, name in rows]
+            text = f"🌟 Твои плюсики ({len(rows)}):" + "".join(lines)
 
         await query.message.reply_text(text, reply_markup=main_menu())
         return
