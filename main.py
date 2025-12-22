@@ -12,6 +12,20 @@ from telegram.ext import (
     filters,
 )
 
+# ================= REQSONS =================
+REASONS = {
+    "integr": "За интеграцию новых коллег в МЛА+",
+    "advice": "За профессиональный совет",
+    "office": "За заботу об офисе",
+    "events": "За организацию мероприятий",
+    "lecture": "За проведение лекции",
+    "support": "За эмоциональную поддержку",
+    "content": "За контент в общем чате",
+    "sport": "Развитие спорта в офисе",
+    "pr": "PR и продвижение МЛА+",
+    "other": "Другое",
+}
+
 # ================= CONFIG =================
 DB_PATH = os.getenv("DB_PATH", "data.db")
 TOKEN = os.getenv("BOT_TOKEN")
@@ -68,24 +82,16 @@ def get_user_name(tg_id: int) -> str | None:
 
 # ================= HANDLERS =================
 
-def _save_plus(update: Update, context: ContextTypes.DEFAULT_TYPE, reason: str):
+def save_plus(from_id: int, to_id: int, reason: str):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
         "INSERT INTO pluses (from_id, to_id, reason) VALUES (?, ?, ?)",
-        (
-            update.effective_user.id,
-            context.user_data["plus_to"],
-            reason,
-        ),
+        (from_id, to_id, reason),
     )
     conn.commit()
     conn.close()
 
-    context.user_data.clear()
-    update.callback_query.message.reply_text(
-        "✅ Плюсик успешно добавлен!", reply_markup=main_menu()
-    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -132,8 +138,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Опиши причину чуть подробнее 🙂")
             return
 
-        reason = f"Другое: {text}"
-        _save_plus(update, context, reason)
+        to_id = context.user_data.get("plus_to")
+        if not to_id:
+            await update.message.reply_text(
+                "Что-то пошло не так, попробуй ещё раз 🙏",
+                reply_markup=main_menu(),
+            )
+            context.user_data.clear()
+            return
+
+        save_plus(
+            from_id=update.effective_user.id,
+            to_id=to_id,
+            reason=f"Другое: {text}",
+        )
+
+        context.user_data.clear()
+        await update.message.reply_text(
+            "✅ Плюсик успешно добавлен!",
+            reply_markup=main_menu(),
+        )
         return
 
 
@@ -179,23 +203,11 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         context.user_data["plus_to"] = to_id
 
-        reasons = [
-            "За интеграцию новых коллег в МЛА+",
-            "За профессиональный совет",
-            "За заботу об офисе",
-            "За организацию мероприятий",
-            "За проведение лекции",
-            "За эмоциональную поддержку",
-            "За контент в общем чате",
-            "Развитие спорта в офисе",
-            "PR и продвижение МЛА+",
-            "Другое",
-        ]
-
         keyboard = []
-        for r in reasons:
-            key = "reason:other" if r == "Другое" else f"reason:{r}"
-            keyboard.append([InlineKeyboardButton(r, callback_data=key)])
+        for key, title in REASONS.items():
+            keyboard.append(
+                [InlineKeyboardButton(title, callback_data=f"reason:{key}")]
+            )
 
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
 
@@ -204,15 +216,27 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Причина =====
     if data.startswith("reason:"):
-        reason = data.split(":", 1)[1]
+      key = data.split(":", 1)[1]
 
-        if reason == "other":
-            context.user_data["awaiting_custom_reason"] = True
-            await query.message.reply_text("✍️ Напиши свою причину")
-            return
+      if key == "other":
+          context.user_data["awaiting_custom_reason"] = True
+          await query.message.reply_text("✍️ Напиши свою причину")
+          return
 
-        _save_plus(update, context, reason)
-        return
+      reason_text = REASONS[key]
+      save_plus(
+          from_id=query.from_user.id,
+          to_id=context.user_data["plus_to"],
+          reason=reason_text,
+      )
+
+      context.user_data.clear()
+      await query.message.reply_text(
+          "✅ Плюсик успешно добавлен!",
+          reply_markup=main_menu()
+      )
+      return
+
 
     # ===== Статус =====
     if data == "status":
@@ -237,7 +261,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "У тебя пока нет плюсиков 🙂"
         else:
             lines = [f"• {reason} — от {name}" for reason, name in rows]
-            text = f"🌟 Твои плюсики ({len(rows)}):" + "".join(lines)
+            text = f"🌟 Твои плюсики ({len(rows)}):\n" + "\n".join(lines)
 
         await query.message.reply_text(text, reply_markup=main_menu())
         return
