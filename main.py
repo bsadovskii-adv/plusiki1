@@ -136,33 +136,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _save_plus(update, context, reason)
         return
 
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            """
-            INSERT INTO pluses (from_id, to_id, reason)
-            VALUES (?, ?, ?)
-            """,
-            (
-                update.effective_user.id,
-                context.user_data["plus_to"],
-                text,
-            ),
-        )
-        conn.commit()
-        conn.close()
-
-        context.user_data.clear()
-        await update.message.reply_text("✅ Плюсик успешно добавлен!", reply_markup=main_menu())
-        return
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    data = query.data
+
     # ===== Поставить плюсик =====
-    if query.data == "give_plus":
+    if data == "give_plus":
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute(
@@ -173,56 +156,66 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
 
         if not users:
-            await query.message.reply_text(
-                "Пока некому ставить плюсики 🙂", reply_markup=main_menu()
-            )
+            await query.message.reply_text("Пока некому ставить плюсики 🙂", reply_markup=main_menu())
             return
 
         keyboard = [
-            [InlineKeyboardButton(name, callback_data=f"choose_{uid}")]
+            [InlineKeyboardButton(name, callback_data=f"choose:{uid}")]
             for uid, name in users
         ]
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
 
-        await query.message.reply_text(
-            "Кому поставить плюсик?", reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.message.reply_text("Кому поставить плюсик?", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     # ===== Выбор пользователя =====
-    if query.data.startswith("choose_"):
-        to_id = int(query.data.split("_")[1])
+    if data.startswith("choose:"):
+        to_id = int(data.split(":")[1])
 
         if to_id == query.from_user.id:
-            await query.message.reply_text(
-                "Нельзя поставить плюсик самому себе 😅", reply_markup=main_menu()
-            )
+            await query.message.reply_text("Нельзя поставить плюсик самому себе 😅", reply_markup=main_menu())
             return
 
         context.user_data.clear()
         context.user_data["plus_to"] = to_id
 
-        keyboard = [
-            [InlineKeyboardButton("За интеграцию новых коллег в МЛА+", callback_data="reason_integr")],
-            [InlineKeyboardButton("За профессиональный совет", callback_data="reason_advice")],
-            [InlineKeyboardButton("За заботу об офисе", callback_data="reason_care")],
-            [InlineKeyboardButton("Другое", callback_data="reason_other")],
+        reasons = [
+            "За интеграцию новых коллег в МЛА+",
+            "За профессиональный совет",
+            "За заботу об офисе",
+            "За организацию мероприятий",
+            "За проведение лекции",
+            "За эмоциональную поддержку",
+            "За контент в общем чате",
+            "Развитие спорта в офисе",
+            "PR и продвижение МЛА+",
+            "Другое",
         ]
 
-        await query.message.reply_text(
-            "За что ставим плюсик?", reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        keyboard = []
+        for r in reasons:
+            key = "reason:other" if r == "Другое" else f"reason:{r}"
+            keyboard.append([InlineKeyboardButton(r, callback_data=key)])
+
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+
+        await query.message.reply_text("За что ставим плюсик?", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
-        context.user_data.clear()
-        context.user_data["plus_to"] = to_id
-        context.user_data["awaiting_reason"] = True
+    # ===== Причина =====
+    if data.startswith("reason:"):
+        reason = data.split(":", 1)[1]
 
-        await query.message.reply_text("✍️ За что этот плюсик?")
+        if reason == "other":
+            context.user_data["awaiting_custom_reason"] = True
+            await query.message.reply_text("✍️ Напиши свою причину")
+            return
+
+        _save_plus(update, context, reason)
         return
 
     # ===== Статус =====
-    if query.data == "status":
+    if data == "status":
         tg_id = query.from_user.id
 
         conn = sqlite3.connect(DB_PATH)
@@ -250,9 +243,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ===== Назад =====
-    if query.data == "back":
+    if data == "back":
         await query.message.reply_text("Главное меню:", reply_markup=main_menu())
         return
+
 
 
 # ================= MAIN ====================
