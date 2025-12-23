@@ -212,23 +212,27 @@ def save_plus(context, to_id: int, reason: str, comment: str | None):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
-
-    user = get_user_by_tg_id(tg_id)
-
-    if 'internal_id' in context.user_data:
-        internal_id = context.user_data['internal_id']
+    
+    # Проверяем привязку через новую функцию
+    user_id = get_user_by_tg_id(tg_id)
+    
+    if user_id:
+        # Сохраняем internal_id в context для использования в других функциях
+        context.user_data['internal_id'] = user_id
+        
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT name FROM users WHERE id = ?", (internal_id,))
+        c.execute("SELECT name FROM users WHERE id = ?", (user_id,))
         row = c.fetchone()
         conn.close()
+        
         if row:
             name = row[0]
             await update.message.reply_text(
                 f"С возвращением, {name}! 👋",
                 reply_markup=main_menu(),
             )
-            return
+        return
 
     if user:
         _, name = user
@@ -482,37 +486,54 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Статус =====
     if data == "status":
-        tg_id = query.from_user.id
+      # Получаем внутренний ID пользователя
+      internal_id = context.user_data.get('internal_id')
+      
+      # Если нет в context, пробуем найти в БД по привязке
+      if not internal_id:
+          tg_id = query.from_user.id
+          internal_id = get_binding_by_user_id(tg_id)
+          if internal_id:
+              # Сохраняем в context для будущих запросов
+              context.user_data['internal_id'] = internal_id
+          else:
+              await query.message.reply_text(
+                  "Сначала выбери себя через /start",
+                  reply_markup=main_menu(),
+              )
+              return
+      
+      conn = sqlite3.connect(DB_PATH)
+      c = conn.cursor()
+      
+      # Исправленный запрос - используем internal_id (который равен user_id в БД)
+      c.execute(
+          """
+          SELECT p.reason, p.comment, u.name
+          FROM pluses p
+          JOIN users u ON u.id = p.from_id  -- исправлено: u.id вместо u.tg_id
+          WHERE p.to_id = ?  -- теперь to_id это user_id, а не tg_id
+          ORDER BY p.created_at DESC
+          """,
+          (internal_id,),  # передаём внутренний ID
+      )
+      rows = c.fetchall()
+      conn.close()
+      
+      lines = []
+      if not rows:
+          text = "У тебя пока нет плюсиков 🙂"
+      else:
+          for reason, comment, name in rows:
+              line = f"• {reason} — от {name}"
+              if comment:
+                  line += f"\n   💬 {comment}"
+              lines.append(line)
 
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            """
-            SELECT p.reason, p.comment, u.name
-            FROM pluses p
-            JOIN users u ON u.tg_id = p.from_id
-            WHERE p.to_id = ?
-            ORDER BY p.created_at DESC
-            """,
-            (tg_id,),
-        )
-        rows = c.fetchall()
-        conn.close()
-        
-        lines = []
-        if not rows:
-            text = "У тебя пока нет плюсиков 🙂"
-        else:
-            for reason, comment, name in rows:
-                line = f"• {reason} — от {name}"
-                if comment:
-                    line += f"\n   💬 {comment}"
-                lines.append(line)
+          text = f"🌟 Твои плюсики ({len(rows)}):\n" + "\n".join(lines)
 
-            text = f"🌟 Твои плюсики ({len(rows)}):\n" + "\n".join(lines)
-
-        await query.message.reply_text(text, reply_markup=main_menu())
-        return
+      await query.message.reply_text(text, reply_markup=main_menu())
+      return
 
     # ===== Назад =====
     if data == "back":
