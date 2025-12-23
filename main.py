@@ -111,6 +111,17 @@ def get_all_users():
     conn.close()
     return rows
 
+def get_binding_by_telegram_id(tg_id: int):
+    """Получить привязку по Telegram ID"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT user_id FROM telegram_bindings WHERE telegram_id = ?",
+        (tg_id,)
+    )
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
 
 def get_binding_by_user_id(user_id: int):
     """Получить привязку по внутреннему user_id"""
