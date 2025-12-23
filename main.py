@@ -38,29 +38,32 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    c.execute(
-        """
+    c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             tg_id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
         )
-        """
-    )
+    """)
 
-    c.execute(
-        """
+    c.execute("""
         CREATE TABLE IF NOT EXISTS pluses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             from_id INTEGER NOT NULL,
             to_id INTEGER NOT NULL,
             reason TEXT NOT NULL,
+            comment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-        """
-    )
+    """)
+
+    try:
+        c.execute("ALTER TABLE pluses ADD COLUMN comment TEXT")
+    except sqlite3.OperationalError:
+        pass 
 
     conn.commit()
     conn.close()
+
 
 # ================= UI =====================
 def main_menu():
@@ -82,15 +85,19 @@ def get_user_name(tg_id: int) -> str | None:
 
 # ================= HANDLERS =================
 
-def save_plus(from_id: int, to_id: int, reason: str):
+def save_plus(from_id: int, to_id: int, reason: str, comment: str | None):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "INSERT INTO pluses (from_id, to_id, reason) VALUES (?, ?, ?)",
-        (from_id, to_id, reason),
+        """
+        INSERT INTO pluses (from_id, to_id, reason, comment)
+        VALUES (?, ?, ?, ?)
+        """,
+        (from_id, to_id, reason, comment),
     )
     conn.commit()
     conn.close()
+
 
 
 
@@ -159,6 +166,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu(),
         )
         return
+    
+    if context.user_data.get("awaiting_comment_text"):
+      comment = text[:300]
+
+      save_plus(
+          from_id=update.effective_user.id,
+          to_id=context.user_data["plus_to"],
+          reason=context.user_data["pending_reason"],
+          comment=comment,
+      )
+
+      context.user_data.clear()
+      await update.message.reply_text(
+          "✅ Плюсик с комментарием успешно добавлен!",
+          reply_markup=main_menu(),
+      )
+      return
+
 
 
 
@@ -216,26 +241,29 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Причина =====
     if data.startswith("reason:"):
-      key = data.split(":", 1)[1]
+        key = data.split(":", 1)[1]
 
-      if key == "other":
-          context.user_data["awaiting_custom_reason"] = True
-          await query.message.reply_text("✍️ Напиши свою причину")
-          return
+        if key == "other":
+            context.user_data["awaiting_custom_reason"] = True
+            await query.message.reply_text("✍️ Напиши свою причину")
+            return
 
-      reason_text = REASONS[key]
-      save_plus(
-          from_id=query.from_user.id,
-          to_id=context.user_data["plus_to"],
-          reason=reason_text,
-      )
+        # сохраняем причину, но НЕ пишем в БД
+        reason_text = REASONS[key]
+        context.user_data["pending_reason"] = reason_text
+        context.user_data["awaiting_comment_choice"] = True
 
-      context.user_data.clear()
-      await query.message.reply_text(
-          "✅ Плюсик успешно добавлен!",
-          reply_markup=main_menu()
-      )
-      return
+        keyboard = [
+            [InlineKeyboardButton("✍️ Добавить комментарий", callback_data="add_comment")],
+            [InlineKeyboardButton("⏭ Пропустить", callback_data="skip_comment")],
+        ]
+
+        await query.message.reply_text(
+            "Хочешь добавить комментарий к плюсику?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
 
 
     # ===== Статус =====
@@ -246,7 +274,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         c = conn.cursor()
         c.execute(
             """
-            SELECT p.reason, u.name
+            SELECT p.reason, p.comment, u.name
             FROM pluses p
             JOIN users u ON u.tg_id = p.from_id
             WHERE p.to_id = ?
@@ -256,11 +284,17 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         rows = c.fetchall()
         conn.close()
-
+        
+        lines = []
         if not rows:
             text = "У тебя пока нет плюсиков 🙂"
         else:
-            lines = [f"• {reason} — от {name}" for reason, name in rows]
+            for reason, comment, name in rows:
+                line = f"• {reason} — от {name}"
+                if comment:
+                    line += f"\n   💬 {comment}"
+                lines.append(line)
+
             text = f"🌟 Твои плюсики ({len(rows)}):\n" + "\n".join(lines)
 
         await query.message.reply_text(text, reply_markup=main_menu())
@@ -270,6 +304,30 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "back":
         await query.message.reply_text("Главное меню:", reply_markup=main_menu())
         return
+
+    # ===== Пропуск причины =====
+    if data == "skip_comment":
+      save_plus(
+          from_id=query.from_user.id,
+          to_id=context.user_data["plus_to"],
+          reason=context.user_data["pending_reason"],
+          comment=None,
+      )
+
+      context.user_data.clear()
+      await query.message.reply_text(
+          "✅ Плюсик добавлен без комментария!",
+          reply_markup=main_menu(),
+      )
+      return
+
+    # ===== Добавлен комментарий =====    
+    if data == "add_comment":
+      context.user_data["awaiting_comment_text"] = True
+      await query.message.reply_text("✍️ Напиши комментарий (до 300 символов)")
+      return
+
+
 
 
 
