@@ -40,7 +40,8 @@ def init_db():
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            tg_id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            tg_id INTEGER UNIQUE,                  
             name TEXT NOT NULL
         )
     """)
@@ -63,6 +64,14 @@ def init_db():
     conn.commit()
     conn.close()
 
+def user_exists(tg_id: int) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM users WHERE tg_id = ?", (tg_id,))
+    exists = c.fetchone() is not None
+    conn.close()
+    return exists
+
 
 # ================= UI =====================
 def main_menu():
@@ -74,13 +83,27 @@ def main_menu():
     )
 
 # ================= HELPERS =================
-def get_user_name(tg_id: int) -> str | None:
+def get_user_by_tg_id(tg_id: int):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
+    c.execute(
+        "SELECT id, name FROM users WHERE tg_id = ?",
+        (tg_id,),
+    )
     row = c.fetchone()
     conn.close()
-    return row[0] if row else None
+    return row  # (id, name) | None
+
+def get_unbound_users():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, name FROM users WHERE tg_id IS NULL"
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
 
 # ================= HANDLERS =================
 
@@ -102,16 +125,35 @@ def save_plus(from_id: int, to_id: int, reason: str, comment: str | None):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
-    name = get_user_name(tg_id)
 
-    if not name:
-        await update.message.reply_text("👋 Привет! Как тебя зовут?")
-        context.user_data.clear()
-        context.user_data["awaiting_name"] = True
-    else:
+    user = get_user_by_tg_id(tg_id)
+
+    if user:
+        _, name = user
         await update.message.reply_text(
-            f"С возвращением, {name}! 👋", reply_markup=main_menu()
+            f"С возвращением, {name}! 👋",
+            reply_markup=main_menu(),
         )
+        return
+
+    users = get_unbound_users()
+
+    if not users:
+        await update.message.reply_text(
+            "Нет доступных пользователей для привязки. Обратись к администратору."
+        )
+        return
+
+    keyboard = [
+        [InlineKeyboardButton(name, callback_data=f"select_self:{uid}")]
+        for uid, name in users
+    ]
+
+    await update.message.reply_text(
+        "Выбери себя из списка:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -215,6 +257,42 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.reply_text("Кому поставить плюсик?", reply_markup=InlineKeyboardMarkup(keyboard))
         return
+    
+    # ===== Подтверждение выбора =====
+    if data == "confirm_self":
+        user_id = context.user_data.get("pending_self_id")
+
+        if not user_id:
+            await query.message.reply_text("Ошибка состояния. Попробуй снова.")
+            return
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            """
+            UPDATE users
+            SET tg_id = ?
+            WHERE id = ? AND tg_id IS NULL
+            """,
+            (query.from_user.id, user_id),
+        )
+        conn.commit()
+        conn.close()
+
+        context.user_data.clear()
+        await query.message.reply_text(
+            "✅ Отлично! Ты успешно вошёл.",
+            reply_markup=main_menu(),
+        )
+        return
+
+
+    # ===== Отмена выбора =====
+    if data == "cancel_self":
+        context.user_data.clear()
+        await start(update, context)
+        return
+
 
     # ===== Выбор пользователя =====
     if data.startswith("choose:"):
@@ -237,6 +315,41 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.reply_text("За что ставим плюсик?", reply_markup=InlineKeyboardMarkup(keyboard))
         return
+    
+    # ===== Выбор себя в списке =====
+    if data.startswith("select_self:"):
+      user_id = int(data.split(":")[1])
+
+      conn = sqlite3.connect(DB_PATH)
+      c = conn.cursor()
+      c.execute(
+          "SELECT name FROM users WHERE id = ? AND tg_id IS NULL",
+          (user_id,),
+      )
+      row = c.fetchone()
+      conn.close()
+
+      if not row:
+          await query.message.reply_text(
+              "Этот пользователь уже привязан.",
+              reply_markup=main_menu(),
+          )
+          return
+
+      name = row[0]
+      context.user_data["pending_self_id"] = user_id
+
+      keyboard = [
+          [InlineKeyboardButton("✅ Да, это я", callback_data="confirm_self")],
+          [InlineKeyboardButton("❌ Нет, вернуться", callback_data="cancel_self")],
+      ]
+
+      await query.message.reply_text(
+          f"Подтверди, что ты — {name}:",
+          reply_markup=InlineKeyboardMarkup(keyboard),
+      )
+      return
+
 
     # ===== Причина =====
     if data.startswith("reason:"):
