@@ -51,7 +51,6 @@ def init_db():
             from_id INTEGER NOT NULL,
             to_id INTEGER NOT NULL,
             reason TEXT NOT NULL,
-            comment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -59,7 +58,7 @@ def init_db():
     try:
         c.execute("ALTER TABLE pluses ADD COLUMN comment TEXT")
     except sqlite3.OperationalError:
-        pass 
+        pass
 
     conn.commit()
     conn.close()
