@@ -92,17 +92,6 @@ def main_menu():
     )
 
 # ================= HELPERS =================
-def get_user_by_tg_id(tg_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, name FROM users WHERE tg_id = ?",
-        (tg_id,),
-    )
-    row = c.fetchone()
-    conn.close()
-    return row  # (id, name) | None
-
 def get_unbound_users():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -181,31 +170,52 @@ def get_free_users():
     return rows
 
 
+def get_or_restore_internal_id(context, telegram_id: int) -> int | None:
+    """
+    Получить internal_id из context или восстановить из БД.
+    Возвращает internal_id или None, если привязки нет.
+    """
+    # Пробуем получить из context
+    internal_id = context.user_data.get('internal_id')
+    if internal_id:
+        return internal_id
+    
+    # Если нет в context, пробуем восстановить из БД
+    internal_id = get_binding_by_telegram_id(telegram_id)
+    if internal_id:
+        context.user_data['internal_id'] = internal_id
+        return internal_id
+    
+    return None
+
 # ================= HANDLERS =================
 
-def save_plus(context, to_id: int, reason: str, comment: str | None):
-  """Сохранение плюсика с использованием внутренних ID"""
-  internal_id = context.user_data.get('internal_id')
-  if not internal_id:
-      raise ValueError("Internal ID not set. Please select yourself first.")
-  
-  # Дополнительная проверка, что to_id существует
-  conn = sqlite3.connect(DB_PATH)
-  c = conn.cursor()
-  c.execute("SELECT 1 FROM users WHERE id = ?", (to_id,))
-  if not c.fetchone():
-      conn.close()
-      raise ValueError(f"User with id {to_id} does not exist.")
-  
-  c.execute(
-      """
-      INSERT INTO pluses (from_id, to_id, reason, comment)
-      VALUES (?, ?, ?, ?)
-      """,
-      (internal_id, to_id, reason, comment),
-  )
-  conn.commit()
-  conn.close()
+# def save_plus(context, to_id: int, reason: str, comment: str | None):
+def save_plus(context, telegram_id: int, to_id: int, reason: str, comment: str | None):
+    """Сохранение плюсика с использованием внутренних ID"""
+    # Получаем internal_id отправителя
+    internal_id = get_or_restore_internal_id(context, telegram_id)
+    if not internal_id:
+        raise ValueError("Internal ID not set. Please select yourself first.")
+    
+    # Проверяем, что to_id существует
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM users WHERE id = ?", (to_id,))
+    if not c.fetchone():
+        conn.close()
+        raise ValueError(f"User with id {to_id} does not exist.")
+    
+    # Сохраняем плюсик
+    c.execute(
+        """
+        INSERT INTO pluses (from_id, to_id, reason, comment)
+        VALUES (?, ?, ?, ?)
+        """,
+        (internal_id, to_id, reason, comment),
+    )
+    conn.commit()
+    conn.close()
 
 
 
@@ -214,7 +224,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
     
     # Проверяем привязку через новую функцию
-    user_id = get_user_by_tg_id(tg_id)
+    user_id = get_binding_by_user_id(tg_id)
     
     if user_id:
         # Сохраняем internal_id в context для использования в других функциях
@@ -234,13 +244,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    if user:
-        _, name = user
-        await update.message.reply_text(
-            f"С возвращением, {name}! 👋",
-            reply_markup=main_menu(),
-        )
-        return
 
     users = get_all_users()
     
@@ -287,6 +290,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ===== Ввод кастомной причины =====
+    # В блоке awaiting_custom_reason:
     if context.user_data.get("awaiting_custom_reason"):
         if len(text) < 3:
             await update.message.reply_text("Опиши причину чуть подробнее 🙂")
@@ -301,12 +305,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
 
-        save_plus(
-            context=context,
-            from_id=update.effective_user.id,
-            to_id=to_id,
-            reason=f"Другое: {text}",
-        )
+        try:
+            save_plus(
+                context=context,
+                telegram_id=update.effective_user.id,
+                to_id=to_id,
+                reason=f"Другое: {text}",
+                comment=None,
+            )
+        except ValueError as e:
+            await update.message.reply_text(
+                f"❌ Ошибка: {str(e)}",
+                reply_markup=main_menu(),
+            )
+            return
 
         context.user_data.clear()
         await update.message.reply_text(
@@ -314,23 +326,32 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu(),
         )
         return
-    
+
+    # В блоке awaiting_comment_text:
     if context.user_data.get("awaiting_comment_text"):
-      comment = text[:300]
+        comment = text[:300]
 
-      save_plus(
-          context=context,
-          to_id=context.user_data["plus_to"],
-          reason=context.user_data["pending_reason"],
-          comment=comment,
-      )
+        try:
+            save_plus(
+                context=context,
+                telegram_id=update.effective_user.id,
+                to_id=context.user_data["plus_to"],
+                reason=context.user_data["pending_reason"],
+                comment=comment,
+            )
+        except ValueError as e:
+            await update.message.reply_text(
+                f"❌ Ошибка: {str(e)}",
+                reply_markup=main_menu(),
+            )
+            return
 
-      context.user_data.clear()
-      await update.message.reply_text(
-          "✅ Плюсик с комментарием успешно добавлен!",
-          reply_markup=main_menu(),
-      )
-      return
+        context.user_data.clear()
+        await update.message.reply_text(
+            "✅ Плюсик с комментарием успешно добавлен!",
+            reply_markup=main_menu(),
+        )
+        return
 
 
 
@@ -343,9 +364,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Поставить плюсик =====
     if data == "give_plus":
-      internal_id = context.user_data.get('internal_id')
+      internal_id = get_or_restore_internal_id(context, query.from_user.id)
       if not internal_id:
-          await query.message.reply_text("Сначала выбери себя через /start")
+          await query.message.reply_text(
+              "Сначала выбери себя через /start",
+              reply_markup=main_menu(),
+          )
           return
       
       conn = sqlite3.connect(DB_PATH)
@@ -459,28 +483,47 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Причина =====
     if data.startswith("reason:"):
-        key = data.split(":", 1)[1]
-
-        if key == "other":
-            context.user_data["awaiting_custom_reason"] = True
-            await query.message.reply_text("✍️ Напиши свою причину")
-            return
-
-        # сохраняем причину, но НЕ пишем в БД
-        reason_text = REASONS[key]
-        context.user_data["pending_reason"] = reason_text
-        context.user_data["awaiting_comment_choice"] = True
-
-        keyboard = [
-            [InlineKeyboardButton("✍️ Добавить комментарий", callback_data="add_comment")],
-            [InlineKeyboardButton("⏭ Пропустить", callback_data="skip_comment")],
-        ]
-
-        await query.message.reply_text(
-            "Хочешь добавить комментарий к плюсику?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        return
+      # Проверяем и восстанавливаем internal_id
+      internal_id = get_or_restore_internal_id(context, query.from_user.id)
+      if not internal_id:
+          await query.message.reply_text(
+              "❌ Сначала выбери себя через /start",
+              reply_markup=main_menu(),
+          )
+          return
+      
+      # Проверяем, что есть получатель плюсика
+      if "plus_to" not in context.user_data:
+          await query.message.reply_text(
+              "❌ Получатель не выбран. Начни заново.",
+              reply_markup=main_menu(),
+          )
+          context.user_data.clear()
+          return
+      
+      # ... остальной код без изменений
+      key = data.split(":", 1)[1]
+      
+      if key == "other":
+          context.user_data["awaiting_custom_reason"] = True
+          await query.message.reply_text("✍️ Напиши свою причину")
+          return
+      
+      # сохраняем причину
+      reason_text = REASONS[key]
+      context.user_data["pending_reason"] = reason_text
+      context.user_data["awaiting_comment_choice"] = True
+      
+      keyboard = [
+          [InlineKeyboardButton("✍️ Добавить комментарий", callback_data="add_comment")],
+          [InlineKeyboardButton("⏭ Пропустить", callback_data="skip_comment")],
+      ]
+      
+      await query.message.reply_text(
+          "Хочешь добавить комментарий к плюсику?",
+          reply_markup=InlineKeyboardMarkup(keyboard),
+      )
+      return
 
 
 
@@ -542,12 +585,20 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== Пропуск причины =====
     if data == "skip_comment":
-      save_plus(
-          context=context,
-          to_id=context.user_data["plus_to"],
-          reason=context.user_data["pending_reason"],
-          comment=None,
-      )
+      try:
+          save_plus(
+              context=context,
+              telegram_id=query.from_user.id,
+              to_id=context.user_data["plus_to"],
+              reason=context.user_data["pending_reason"],
+              comment=None,
+          )
+      except ValueError as e:
+          await query.message.reply_text(
+              f"❌ Ошибка: {str(e)}",
+              reply_markup=main_menu(),
+          )
+          return
 
       context.user_data.clear()
       await query.message.reply_text(
