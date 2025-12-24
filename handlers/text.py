@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from services.pluses import save_plus
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    tg_id = update.effective_user.id
+
+    # ===== Кастомная причина (Другое) =====
+    if context.user_data.get("awaiting_custom_reason"):
+        if len(text) < 3:
+            await update.message.reply_text("Опиши причину чуть подробнее 🙂")
+            return
+
+        context.user_data.pop("awaiting_custom_reason", None)
+        context.user_data["pending_reason"] = f"Другое: {text}"
+
+        keyboard = [
+            [{"text": "✍️ Добавить комментарий", "callback_data": "add_comment"}],
+            [{"text": "⏭ Пропустить", "callback_data": "skip_comment"}],
+        ]
+
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
+        await update.message.reply_text(
+            "Хочешь добавить комментарий?",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton(**btn) for btn in row] for row in keyboard]
+            ),
+        )
+        return
+
+    # ===== Ввод комментария =====
+    if context.user_data.get("awaiting_comment_text"):
+        comment = text[:300]
+
+        try:
+            save_plus(
+                from_id=context.user_data["internal_id"],
+                to_id=context.user_data["plus_to"],
+                reason=context.user_data["pending_reason"],
+                comment=comment,
+            )
+        except KeyError:
+            await update.message.reply_text(
+                "Что-то пошло не так, начни заново 🙏"
+            )
+            context.user_data.clear()
+            return
+
+        context.user_data.clear()
+        await update.message.reply_text(
+            "✅ Плюсик с комментарием успешно добавлен!"
+        )
+        return
