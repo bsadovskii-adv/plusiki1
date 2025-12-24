@@ -268,7 +268,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_offset += len(header)
 
             for reason, comment, name in rows:
-                line = f"⬤ {reason} — от {name}"
+                line = f"➕ {reason} — от {name}"
                 
                 entities.append(
                     MessageEntity(
