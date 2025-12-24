@@ -19,6 +19,11 @@ entities = []
 current_offset = 0
 
 
+def _utf16_len(s: str) -> int:
+    """Return length in UTF-16 code units for Telegram entity offsets."""
+    return len(s.encode("utf-16-le")) // 2
+
+
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -265,30 +270,30 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             header = f"🌟 Твои плюсики ({len(rows)}):\n"
             lines.append(header)
-            current_offset += len(header)
+            current_offset += _utf16_len(header)
 
             for reason, comment, name in rows:
                 line = f"➕ {reason} — от {name}"
-                
+
                 entities.append(
                     MessageEntity(
                         type=MessageEntity.CUSTOM_EMOJI,
-                        offset=current_offset,  
-                        length=1,
+                        offset=current_offset,
+                        length=_utf16_len("➕"),
                         custom_emoji_id=emoji_id,
                     )
                 )
 
                 lines.append(line)
-                current_offset += len(line)
+                current_offset += _utf16_len(line)
 
                 if comment:
                     comment_line = f"\n   💬 {comment}"
                     lines.append(comment_line)
-                    current_offset += len(comment_line)
+                    current_offset += _utf16_len(comment_line)
 
                 lines.append("\n")
-                current_offset += 1
+                current_offset += _utf16_len("\n")
 
             text = "".join(lines)
 
