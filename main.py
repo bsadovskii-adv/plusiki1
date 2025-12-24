@@ -72,14 +72,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-def user_exists(tg_id: int) -> bool:
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT 1 FROM users WHERE tg_id = ?", (tg_id,))
-    exists = c.fetchone() is not None
-    conn.close()
-    return exists
-
 
 
 # ================= UI =====================
@@ -92,16 +84,6 @@ def main_menu():
     )
 
 # ================= HELPERS =================
-def get_unbound_users():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, name FROM users WHERE tg_id IS NULL"
-    )
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
 def get_all_users():
     """Получить всех пользователей"""
     conn = sqlite3.connect(DB_PATH)
@@ -141,7 +123,7 @@ def create_binding(telegram_id: int, user_id: int):
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT OR REPLACE INTO telegram_bindings (telegram_id, user_id) VALUES (?, ?)",
+            "INSERT INTO telegram_bindings (telegram_id, user_id) VALUES (?, ?)",
             (telegram_id, user_id)
         )
         conn.commit()
@@ -186,10 +168,10 @@ def get_or_restore_internal_id(context, telegram_id: int) -> int | None:
     Получить internal_id из context или восстановить из БД.
     Возвращает internal_id или None, если привязки нет.
     """
-    # Пробуем получить из context
-    internal_id = context.user_data.get('internal_id')
-    if internal_id:
-        return internal_id
+    # # Пробуем получить из context
+    # internal_id = context.user_data.get('internal_id')
+    # if internal_id:
+    #     return internal_id
     
     # Если нет в context, пробуем восстановить из БД
     internal_id = get_binding_by_telegram_id(telegram_id)
@@ -235,7 +217,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
     
     # Проверяем привязку через новую функцию
-    user_id = get_binding_by_user_id(tg_id)
+    user_id = get_binding_by_telegram_id(tg_id)
     
     if user_id:
         # Сохраняем internal_id в context для использования в других функциях
@@ -278,27 +260,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-
-    # ===== Ввод имени =====
-    if context.user_data.get("awaiting_name"):
-        if len(text) < 2:
-            await update.message.reply_text("Имя слишком короткое, попробуй ещё раз 🙂")
-            return
-
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            "INSERT OR REPLACE INTO users (tg_id, name) VALUES (?, ?)",
-            (update.effective_user.id, text),
-        )
-        conn.commit()
-        conn.close()
-
-        context.user_data.clear()
-        await update.message.reply_text(
-            f"Рад знакомству, {text}! 🎉", reply_markup=main_menu()
-        )
-        return
 
     # ===== Ввод кастомной причины =====
     # В блоке awaiting_custom_reason:
@@ -546,7 +507,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
       # Если нет в context, пробуем найти в БД по привязке
       if not internal_id:
           tg_id = query.from_user.id
-          internal_id = get_binding_by_user_id(tg_id)
+          internal_id = get_binding_by_telegram_id(tg_id)
           if internal_id:
               # Сохраняем в context для будущих запросов
               context.user_data['internal_id'] = internal_id

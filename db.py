@@ -1,0 +1,39 @@
+# -*- coding: utf-8 -*-
+
+import sqlite3
+from config import DB_PATH
+
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS telegram_bindings (
+            telegram_id INTEGER PRIMARY KEY,
+            user_id INTEGER UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS pluses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id INTEGER NOT NULL,
+            to_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            comment TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.commit()
+    conn.close()

@@ -1,8 +1,12 @@
 FROM python:3.11-slim
+
 WORKDIR /app
-COPY main.py /app
-RUN pip install python-telegram-bot==20.7
-ENV BOT_TOKEN=your_token_here
-ENV DB_PATH=/data/data.db
-VOLUME ["/data"]
-CMD ["python", "main.py"]
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "app.py"]

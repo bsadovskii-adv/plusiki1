@@ -1,11 +1,10 @@
-version: '3.9'
 services:
-  bot:
+  tg-plus-bot:
     build: .
     container_name: tg-plus-bot
+    restart: unless-stopped
     environment:
       BOT_TOKEN: ${BOT_TOKEN}
-      DB_PATH: /data/data.db
+      DB_PATH: /app/data/data.db
     volumes:
-      - ./data:/data
-    restart: unless-stopped
+      - ./data:/app/data
