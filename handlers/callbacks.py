@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from telegram.ext import ContextTypes
 
 from config import DB_PATH
@@ -13,6 +13,10 @@ from services.bindings import (
 )
 from services.pluses import save_plus
 from services.users import get_user_name, get_all_users
+
+
+entities = []
+current_offset = 0
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,10 +126,19 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users = [(uid, name) for uid, name in users if uid != internal_id]
 
         await query.message.reply_text(
-            "Кому поставить плюсик?",
+            "Кому поставить плюсик  ?",
+            entity=[
+                MessageEntity(
+                    type=MessageEntity.CUSTOM_EMOJI,
+                    offset=22,
+                    length=1,
+                    custom_emoji_id="5458840666563970188" 
+                )
+            ],
             reply_markup=build_users_pagination(
                 users=users, page=0, action="choose_user", show_back_to_menu=True
             ),
+            
         )
         return
 
@@ -140,7 +153,15 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     to_id = int(parts[1])
                     context.user_data["plus_to"] = to_id
                     await query.message.reply_text(
-                        "За что ставим плюсик?",
+                        "За что ставим плюсик  ?",
+                        entity=[
+                            MessageEntity(
+                                type=MessageEntity.CUSTOM_EMOJI,
+                                offset=21,
+                                length=1,
+                                custom_emoji_id="5458840666563970188" 
+                            )
+                        ],
                         reply_markup=reasons_keyboard(),
                     )
                     return
@@ -176,7 +197,15 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             context.user_data["plus_to"] = to_id
             await query.message.reply_text(
-                "За что ставим плюсик?",
+                "За что ставим плюсик  ?",
+                        entity=[
+                            MessageEntity(
+                                type=MessageEntity.CUSTOM_EMOJI,
+                                offset=21,
+                                length=1,
+                                custom_emoji_id="5458840666563970188" 
+                            )
+                        ],
                 reply_markup=reasons_keyboard(),
             )
             return
@@ -213,7 +242,15 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data.clear()
         await query.message.reply_text(
-            "✅ Плюсик добавлен!",
+            "✅ Плюсик  добавлен!",
+                        entity=[
+                            MessageEntity(
+                                type=MessageEntity.CUSTOM_EMOJI,
+                                offset=10,
+                                length=1,
+                                custom_emoji_id="5458840666563970188" 
+                            )
+                        ],
             reply_markup=main_menu(),
         )
         return
@@ -253,12 +290,40 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "У тебя пока нет плюсиков 🙂"
         else:
             lines = []
-            for reason, comment, name in rows:
-                line = f"• {reason} — от {name}"
-                if comment:
-                    line += f"\n   💬 {comment}"
-                lines.append(line)
-            text = f"🌟 Твои плюсики ({len(rows)}):\n" + "\n".join(lines)
+            entities = []
 
-        await query.message.reply_text(text, reply_markup=main_menu())
+            emoji_id = "5458840666563970188" 
+            current_offset = 0
+
+            header = f"🌟 Твои плюсики ({len(rows)}):\n"
+            lines.append(header)
+            current_offset += len(header)
+
+            for reason, comment, name in rows:
+                line = f"⬤ {reason} — от {name}"
+                
+                entities.append(
+                    MessageEntity(
+                        type=MessageEntity.CUSTOM_EMOJI,
+                        offset=current_offset,  
+                        length=1,
+                        custom_emoji_id=emoji_id,
+                    )
+                )
+
+                lines.append(line)
+                current_offset += len(line)
+
+                if comment:
+                    comment_line = f"\n   💬 {comment}"
+                    lines.append(comment_line)
+                    current_offset += len(comment_line)
+
+                lines.append("\n")
+                current_offset += 1
+
+            text = "".join(lines)
+
+
+        await query.message.reply_text(text, entities=entities, reply_markup=main_menu())
         return
