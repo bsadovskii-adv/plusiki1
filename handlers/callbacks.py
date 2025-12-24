@@ -127,14 +127,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.reply_text(
             "Кому поставить плюсик  ?",
-            entity=[
-                MessageEntity(
-                    type=MessageEntity.CUSTOM_EMOJI,
-                    offset=22,
-                    length=1,
-                    custom_emoji_id="5458840666563970188" 
-                )
-            ],
             reply_markup=build_users_pagination(
                 users=users, page=0, action="choose_user", show_back_to_menu=True
             ),
@@ -154,14 +146,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["plus_to"] = to_id
                     await query.message.reply_text(
                         "За что ставим плюсик  ?",
-                        entity=[
-                            MessageEntity(
-                                type=MessageEntity.CUSTOM_EMOJI,
-                                offset=21,
-                                length=1,
-                                custom_emoji_id="5458840666563970188" 
-                            )
-                        ],
                         reply_markup=reasons_keyboard(),
                     )
                     return
@@ -198,14 +182,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["plus_to"] = to_id
             await query.message.reply_text(
                 "За что ставим плюсик  ?",
-                        entity=[
-                            MessageEntity(
-                                type=MessageEntity.CUSTOM_EMOJI,
-                                offset=21,
-                                length=1,
-                                custom_emoji_id="5458840666563970188" 
-                            )
-                        ],
                 reply_markup=reasons_keyboard(),
             )
             return
@@ -243,14 +219,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await query.message.reply_text(
             "✅ Плюсик  добавлен!",
-                        entity=[
-                            MessageEntity(
-                                type=MessageEntity.CUSTOM_EMOJI,
-                                offset=10,
-                                length=1,
-                                custom_emoji_id="5458840666563970188" 
-                            )
-                        ],
             reply_markup=main_menu(),
         )
         return
