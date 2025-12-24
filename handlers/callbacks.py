@@ -6,13 +6,13 @@ from telegram.ext import ContextTypes
 
 from config import DB_PATH
 from constants import REASONS
-from ui import main_menu, reasons_keyboard
+from ui import main_menu, reasons_keyboard, build_users_pagination
 from services.bindings import (
     get_binding_by_telegram_id,
     create_binding,
 )
 from services.pluses import save_plus
-from services.users import get_user_name
+from services.users import get_user_name, get_all_users
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -26,11 +26,41 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Главное меню:", reply_markup=main_menu())
         return
 
-    # ========= SELECT SELF =========
+    # ========= SELECT SELF (with pagination support) =========
     if data.startswith("select_self:"):
-        user_id = int(data.split(":")[1])
-        context.user_data["pending_self_id"] = user_id
+        parts = data.split(":")
 
+        # pagination: select_self:page:N
+        if len(parts) >= 3 and parts[1] == "page":
+            try:
+                page = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный номер страницы.")
+                return
+            users = get_all_users()
+            await query.message.edit_reply_markup(
+                reply_markup=build_users_pagination(
+                    users=users, page=page, action="select_self", show_back_to_menu=False
+                )
+            )
+            return
+
+        # new format: select_self:user:ID
+        if len(parts) >= 3 and parts[1] == "user":
+            try:
+                user_id = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный пользователь.")
+                return
+        else:
+            # legacy format: select_self:ID
+            try:
+                user_id = int(parts[1])
+            except (IndexError, ValueError):
+                await query.message.reply_text("Неверный пользователь.")
+                return
+
+        context.user_data["pending_self_id"] = user_id
         name = get_user_name(user_id)
 
         keyboard = [
@@ -87,37 +117,69 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["internal_id"] = internal_id
 
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, name FROM users WHERE id != ? ORDER BY name",
-            (internal_id,),
-        )
-        users = c.fetchall()
-        conn.close()
-
-        keyboard = [
-            [InlineKeyboardButton(name, callback_data=f"choose:{uid}")]
-            for uid, name in users
-        ]
-        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+        users = get_all_users()
+        # exclude self
+        users = [(uid, name) for uid, name in users if uid != internal_id]
 
         await query.message.reply_text(
             "Кому поставить плюсик?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=build_users_pagination(
+                users=users, page=0, action="choose_user", show_back_to_menu=True
+            ),
         )
         return
 
-    # ========= CHOOSE USER =========
-    if data.startswith("choose:"):
-        to_id = int(data.split(":")[1])
-        context.user_data["plus_to"] = to_id
+    # ========= CHOOSE USER (with pagination support) =========
+    # new format: choose_user:page:N or choose_user:user:ID
+    if data.startswith("choose_user:") or data.startswith("choose:"):
+        # normalize legacy "choose:ID" to choose_user:user:ID
+        if data.startswith("choose:") and not data.startswith("choose_user:"):
+            parts = data.split(":")
+            if len(parts) >= 2:
+                try:
+                    to_id = int(parts[1])
+                    context.user_data["plus_to"] = to_id
+                    await query.message.reply_text(
+                        "За что ставим плюсик?",
+                        reply_markup=reasons_keyboard(),
+                    )
+                    return
+                except ValueError:
+                    await query.message.reply_text("Неверный пользователь.")
+                    return
 
-        await query.message.reply_text(
-            "За что ставим плюсик?",
-            reply_markup=reasons_keyboard(),
-        )
-        return
+        parts = data.split(":")
+        # pagination nav: choose_user:page:N
+        if len(parts) >= 3 and parts[1] == "page":
+            try:
+                page = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный номер страницы.")
+                return
+            internal_id = context.user_data.get("internal_id")
+            users = get_all_users()
+            if internal_id:
+                users = [(uid, name) for uid, name in users if uid != internal_id]
+            await query.message.edit_reply_markup(
+                reply_markup=build_users_pagination(
+                    users=users, page=page, action="choose_user", show_back_to_menu=True
+                )
+            )
+            return
+
+        # choose_user:user:ID
+        if len(parts) >= 3 and parts[1] == "user":
+            try:
+                to_id = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный пользователь.")
+                return
+            context.user_data["plus_to"] = to_id
+            await query.message.reply_text(
+                "За что ставим плюсик?",
+                reply_markup=reasons_keyboard(),
+            )
+            return
 
     # ========= REASON =========
     if data.startswith("reason:"):
