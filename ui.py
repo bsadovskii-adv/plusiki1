@@ -61,7 +61,8 @@ def main_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Поставить плюсик", callback_data="give_plus")],
         [InlineKeyboardButton("🛍️ Магазин", callback_data="shop")],
-        [InlineKeyboardButton("📊 Мой статус", callback_data="status")],
+        [InlineKeyboardButton("� Мои покупки", callback_data="purchases")],
+        [InlineKeyboardButton("�📊 Мой статус", callback_data="status")],
     ])
 
 

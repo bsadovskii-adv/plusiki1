@@ -47,3 +47,16 @@ def buy_item(user_id: int, item_key: str) -> tuple[bool, str]:
     conn.commit()
     conn.close()
     return True, f"Куплено: {name} за {price} плюсов. Остаток: {balance - price}."
+
+
+def get_user_purchases(user_id: int) -> list[tuple[str, int, str]]:
+    """Get all purchases for a user. Returns list of (item_name, price, created_at)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT item_name, price, created_at FROM purchases WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows

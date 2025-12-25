@@ -14,7 +14,7 @@ from services.bindings import (
 from services.pluses import save_plus
 from services.users import get_user_name, get_all_users
 from services.auth import get_or_restore_internal_id
-from services.shop import get_catalog, get_balance, buy_item
+from services.shop import get_catalog, get_balance, buy_item, get_user_purchases
 
 
 entities = []
@@ -275,6 +275,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rows = c.fetchall()
         conn.close()
 
+        balance = get_balance(internal_id)
+
         if not rows:
             text = "У тебя пока нет плюсиков 🙂"
         else:
@@ -284,7 +286,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             emoji_id = "5458840666563970188" 
             current_offset = 0
 
-            header = f"🌟 Твои плюсики ({len(rows)}):\n"
+            header = f"🌟 Твои плюсики ({balance}/{len(rows)}):\n"
             lines.append(header)
             current_offset += _utf16_len(header)
 
@@ -390,4 +392,28 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "cancel_buy":
         context.user_data.pop("pending_buy", None)
         await query.message.reply_text("Покупка отменена.", reply_markup=main_menu())
+        return
+
+    # ========= PURCHASES =========
+    if data == "purchases":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id:
+            await query.message.reply_text(
+                "Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
+        purchases = get_user_purchases(internal_id)
+        if not purchases:
+            text = "Ты ещё ничего не купил 🙂"
+        else:
+            lines = [f"📦 Твои покупки ({len(purchases)}):\n"]
+            for item_name, price, created_at in purchases:
+                lines.append(f"✓ {item_name} — {price} плюсов")
+                lines.append(f"  {created_at}")
+                lines.append("")
+            text = "\n".join(lines)
+
+        await query.message.reply_text(text, reply_markup=main_menu())
         return
