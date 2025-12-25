@@ -13,6 +13,7 @@ from services.bindings import (
 )
 from services.pluses import save_plus
 from services.users import get_user_name, get_all_users
+from services.auth import get_or_restore_internal_id
 
 
 entities = []
@@ -140,9 +141,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ========= CHOOSE USER (with pagination support) =========
-    # new format: choose_user:page:N or choose_user:user:ID
     if data.startswith("choose_user:") or data.startswith("choose:"):
-        # normalize legacy "choose:ID" to choose_user:user:ID
         if data.startswith("choose:") and not data.startswith("choose_user:"):
             parts = data.split(":")
             if len(parts) >= 2:
@@ -159,14 +158,20 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
         parts = data.split(":")
-        # pagination nav: choose_user:page:N
+        # pagination: choose_user:page:N
         if len(parts) >= 3 and parts[1] == "page":
             try:
                 page = int(parts[2])
             except ValueError:
                 await query.message.reply_text("Неверный номер страницы.")
                 return
-            internal_id = context.user_data.get("internal_id")
+            internal_id = get_or_restore_internal_id(context, tg_id)
+            if not internal_id:
+                await query.message.reply_text(
+                    "❌ Сначала выбери себя через /start",
+                    reply_markup=main_menu(),
+                )
+                return
             users = get_all_users()
             if internal_id:
                 users = [(uid, name) for uid, name in users if uid != internal_id]
@@ -215,18 +220,28 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ========= SKIP COMMENT =========
     if data == "skip_comment":
+        internal_id = get_or_restore_internal_id(context, query.from_user.id)
+        if not internal_id:
+            await query.message.reply_text(
+                "❌ Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
         save_plus(
-            from_id=context.user_data["internal_id"],
+            from_id=internal_id, 
             to_id=context.user_data["plus_to"],
             reason=context.user_data["pending_reason"],
             comment=None,
         )
+
         context.user_data.clear()
         await query.message.reply_text(
-            "✅ Плюсик  добавлен!",
+            "✅ Плюсик добавлен!",
             reply_markup=main_menu(),
         )
         return
+
 
     # ========= ADD COMMENT =========
     if data == "add_comment":
@@ -236,7 +251,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ========= STATUS =========
     if data == "status":
-        internal_id = get_binding_by_telegram_id(tg_id)
+        internal_id = get_or_restore_internal_id(context, tg_id)
         if not internal_id:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
@@ -252,7 +267,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             FROM pluses p
             JOIN users u ON u.id = p.from_id
             WHERE p.to_id = ?
-            ORDER BY p.created_at DESC
+            ORDER BY p.created_at
             """,
             (internal_id,),
         )
