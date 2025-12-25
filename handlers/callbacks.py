@@ -14,6 +14,7 @@ from services.bindings import (
 from services.pluses import save_plus
 from services.users import get_user_name, get_all_users
 from services.auth import get_or_restore_internal_id
+from services.shop import get_catalog, get_balance, buy_item
 
 
 entities = []
@@ -314,4 +315,79 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         await query.message.reply_text(text, entities=entities, reply_markup=main_menu())
+        return
+
+    # ========= SHOP =========
+    if data == "shop":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id:
+            await query.message.reply_text(
+                "Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
+        catalog = get_catalog()
+        balance = get_balance(internal_id)
+
+        lines = [f"🛍️ Магазин — у тебя {balance} плюсов:\n"]
+        keyboard = []
+        for key, (name, price) in catalog.items():
+            lines.append(f"{name} — {price} плюсов")
+            keyboard.append([InlineKeyboardButton(f"Купить ({price}➕)", callback_data=f"buy:{key}")])
+
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+
+        text = "\n".join(lines)
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    if data.startswith("buy:"):
+        item_key = data.split(":", 1)[1]
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id:
+            await query.message.reply_text(
+                "Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
+        catalog = get_catalog()
+        if item_key not in catalog:
+            await query.message.reply_text("Товар не найден.")
+            return
+
+        name, price = catalog[item_key]
+        context.user_data["pending_buy"] = item_key
+
+        keyboard = [
+            [InlineKeyboardButton(f"✅ Купить {name} за {price}➕", callback_data=f"confirm_buy:{item_key}")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="cancel_buy")],
+        ]
+
+        await query.message.reply_text(f"Купить {name} за {price} плюсов?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    if data.startswith("confirm_buy:"):
+        item_key = data.split(":", 1)[1]
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id:
+            await query.message.reply_text(
+                "Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
+        success, msg = buy_item(internal_id, item_key)
+        # clear pending
+        context.user_data.pop("pending_buy", None)
+        if success:
+            await query.message.reply_text(msg, reply_markup=main_menu())
+        else:
+            await query.message.reply_text(msg, reply_markup=main_menu())
+        return
+
+    if data == "cancel_buy":
+        context.user_data.pop("pending_buy", None)
+        await query.message.reply_text("Покупка отменена.", reply_markup=main_menu())
         return
