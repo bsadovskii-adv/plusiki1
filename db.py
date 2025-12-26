@@ -11,7 +11,8 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0
         )
     """)
 

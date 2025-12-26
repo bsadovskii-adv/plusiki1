@@ -6,13 +6,13 @@ from telegram.ext import ContextTypes
 
 from config import DB_PATH
 from constants import REASONS
-from ui import main_menu, reasons_keyboard, build_users_pagination
+from ui import main_menu, admin_menu, reasons_keyboard, build_users_pagination
 from services.bindings import (
     get_binding_by_telegram_id,
     create_binding,
 )
 from services.pluses import save_plus
-from services.users import get_user_name, get_all_users
+from services.users import get_user_name, get_all_users, is_admin, add_user, user_exists
 from services.auth import get_or_restore_internal_id
 from services.shop import get_catalog, get_balance, buy_item, get_user_purchases, get_remaining_stock, is_in_stock
 
@@ -103,9 +103,13 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         context.user_data["internal_id"] = user_id
 
+        # Check if user is admin and show appropriate menu
+        is_admin_user = is_admin(user_id)
+        menu = admin_menu() if is_admin_user else main_menu()
+
         await query.message.reply_text(
             "✅ Ты успешно вошёл!",
-            reply_markup=main_menu(),
+            reply_markup=menu,
         )
         return
 
@@ -427,4 +431,18 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "\n".join(lines)
 
         await query.message.reply_text(text, reply_markup=main_menu())
+        return
+
+    # ========= ADMIN: ADD USER =========
+    if data == "admin_add_user":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        context.user_data["awaiting_new_user_name"] = True
+        await query.message.reply_text("👤 Напиши имя нового пользователя")
         return
