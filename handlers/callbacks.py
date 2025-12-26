@@ -14,7 +14,7 @@ from services.bindings import (
 from services.pluses import save_plus
 from services.users import get_user_name, get_all_users
 from services.auth import get_or_restore_internal_id
-from services.shop import get_catalog, get_balance, buy_item, get_user_purchases
+from services.shop import get_catalog, get_balance, buy_item, get_user_purchases, get_remaining_stock, is_in_stock
 
 
 entities = []
@@ -334,8 +334,19 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         lines = [f"🛍️ Магазин — у тебя {balance} плюсов:\n"]
         keyboard = []
-        for key, (name, price) in catalog.items():
-            lines.append(f"{name} — {price} плюсов")
+        for key, item_data in catalog.items():
+            name = item_data[0]
+            price = item_data[1]
+            
+            # Check if item is in stock
+            if not is_in_stock(key):
+                continue
+            
+            remaining = get_remaining_stock(key)
+            if remaining is not None:
+                lines.append(f"{name} — {price} плюсов (осталось: {remaining})")
+            else:
+                lines.append(f"{name} — {price} плюсов")
             keyboard.append([InlineKeyboardButton(f"Купить ({price}➕)", callback_data=f"buy:{key}")])
 
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
