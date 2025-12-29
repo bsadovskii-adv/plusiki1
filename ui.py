@@ -62,6 +62,7 @@ def main_menu():
         [InlineKeyboardButton("➕ Поставить плюсик", callback_data="give_plus")],
         [InlineKeyboardButton("🛍️ Магазин", callback_data="shop")],
         [InlineKeyboardButton("📦 Мои покупки", callback_data="purchases")],
+        [InlineKeyboardButton("📜 Моя история", callback_data="given_history")],
         [InlineKeyboardButton("📊 Мой статус", callback_data="status")],
     ])
 
@@ -72,8 +73,13 @@ def admin_menu():
         [InlineKeyboardButton("➕ Поставить плюсик", callback_data="give_plus")],
         [InlineKeyboardButton("🛍️ Магазин", callback_data="shop")],
         [InlineKeyboardButton("📦 Мои покупки", callback_data="purchases")],
+        [InlineKeyboardButton("📜 Моя история", callback_data="given_history")],
         [InlineKeyboardButton("📊 Мой статус", callback_data="status")],
         [InlineKeyboardButton("👤 Добавить пользователя", callback_data="admin_add_user")],
+        [InlineKeyboardButton("➕ Добавить товар", callback_data="admin_add_item")],
+        [InlineKeyboardButton("🗑️ Удалить товар", callback_data="admin_items")],
+        [InlineKeyboardButton("📑 Все плюсики", callback_data="admin_view_pluses")],
+        [InlineKeyboardButton("💳 Все покупки", callback_data="admin_view_purchases")],
     ])
 
 

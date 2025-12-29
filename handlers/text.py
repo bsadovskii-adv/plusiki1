@@ -7,6 +7,7 @@ from services.pluses import save_plus
 from services.users import add_user, user_exists, is_admin
 from services.auth import get_or_restore_internal_id
 from ui import admin_menu
+from services.shop import add_item
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,6 +34,39 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Пользователь '{text}' добавлен (ID: {user_id}).",
             reply_markup=menu,
         )
+        return
+
+    # ===== Добавление нового товара (администратор) =====
+    if context.user_data.get("awaiting_new_item"):
+        # Expecting: key;name;price;stock(optional)
+        parts = [p.strip() for p in text.split(";")]
+        if len(parts) < 3:
+            await update.message.reply_text("Неверный формат. Используй: key;name;price;stock(или пусто)")
+            return
+
+        key = parts[0]
+        name = parts[1]
+        try:
+            price = int(parts[2])
+        except ValueError:
+            await update.message.reply_text("Цена должна быть числом.")
+            return
+
+        stock = None
+        if len(parts) >= 4 and parts[3] != "":
+            try:
+                stock = int(parts[3])
+            except ValueError:
+                await update.message.reply_text("Запас должен быть числом или оставь пустым для неограниченного.")
+                return
+
+        success, msg = add_item(key, name, price, stock)
+        context.user_data.pop("awaiting_new_item", None)
+
+        internal_id = get_or_restore_internal_id(context, update.effective_user.id)
+        menu = admin_menu() if internal_id and is_admin(internal_id) else None
+
+        await update.message.reply_text(msg, reply_markup=menu)
         return
 
     # ===== Кастомная причина (Другое) =====

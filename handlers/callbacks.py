@@ -11,10 +11,21 @@ from services.bindings import (
     get_binding_by_telegram_id,
     create_binding,
 )
-from services.pluses import save_plus
+from services.pluses import save_plus, get_pluses_given_by_user, get_recent_pluses
 from services.users import get_user_name, get_all_users, is_admin, add_user, user_exists
 from services.auth import get_or_restore_internal_id
-from services.shop import get_catalog, get_balance, buy_item, get_user_purchases, get_remaining_stock, is_in_stock
+from services.shop import (
+    get_catalog,
+    get_balance,
+    buy_item,
+    get_user_purchases,
+    get_remaining_stock,
+    is_in_stock,
+    get_all_items,
+    add_item,
+    remove_item,
+    get_recent_purchases,
+)
 
 
 entities = []
@@ -374,7 +385,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("Товар не найден.")
             return
 
-        name, price = catalog[item_key]
+        name, price, _ = catalog[item_key]
         context.user_data["pending_buy"] = item_key
 
         keyboard = [
@@ -445,4 +456,132 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["awaiting_new_user_name"] = True
         await query.message.reply_text("👤 Напиши имя нового пользователя")
+        return
+
+    # ========= ADMIN: ADD / REMOVE ITEMS =========
+    if data == "admin_add_item":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        context.user_data["awaiting_new_item"] = True
+        await query.message.reply_text(
+            "🛒 Отправь данные товара в формате: key;name;price;stock(или пусто для неограниченного)\nПример: mug2;Моя кружка;10;5"
+        )
+        return
+
+    if data == "admin_items":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        items = get_all_items()
+        if not items:
+            await query.message.reply_text("Список товаров пуст.", reply_markup=admin_menu())
+            return
+
+        lines = []
+        keyboard = []
+        for key, name, price, limit in items:
+            if limit is None:
+                lines.append(f"{name} ({key}) — {price} плюсов")
+            else:
+                remaining = get_remaining_stock(key)
+                lines.append(f"{name} ({key}) — {price} плюсов (лимит: {limit}, осталось: {remaining})")
+            keyboard.append([InlineKeyboardButton(f"Удалить {key}", callback_data=f"admin_remove:{key}")])
+
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
+        text = "\n".join(lines)
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    if data.startswith("admin_remove:"):
+        key = data.split(":", 1)[1]
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        success, msg = remove_item(key)
+        await query.message.reply_text(msg, reply_markup=admin_menu())
+        return
+
+    # ========= ADMIN: VIEW ALL PLUSSES =========
+    if data == "admin_view_pluses":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        rows = get_recent_pluses(100)
+        if not rows:
+            await query.message.reply_text("Плюсиков пока нет.", reply_markup=admin_menu())
+            return
+
+        lines = []
+        for from_id, from_name, to_id, to_name, reason, comment, created_at in rows:
+            lines.append(f"{created_at}: {from_name} → {to_name}: {reason}" + (f" ({comment})" if comment else ""))
+
+        text = "\n".join(lines)
+        await query.message.reply_text(text, reply_markup=admin_menu())
+        return
+
+    # ========= ADMIN: VIEW ALL PURCHASES =========
+    if data == "admin_view_purchases":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        rows = get_recent_purchases(100)
+        if not rows:
+            await query.message.reply_text("Покупок пока нет.", reply_markup=admin_menu())
+            return
+
+        lines = []
+        for user_id, user_name, item_name, price, created_at in rows:
+            lines.append(f"{created_at}: {user_name} купил {item_name} за {price} плюсов")
+
+        text = "\n".join(lines)
+        await query.message.reply_text(text, reply_markup=admin_menu())
+        return
+
+    # ========= GIVEN HISTORY (who I sent pluses to) =========
+    if data == "given_history":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id:
+            await query.message.reply_text(
+                "Сначала выбери себя через /start",
+                reply_markup=main_menu(),
+            )
+            return
+
+        rows = get_pluses_given_by_user(internal_id)
+        if not rows:
+            await query.message.reply_text("Ты ещё не отправлял плюсики.", reply_markup=main_menu())
+            return
+
+        lines = []
+        for reason, comment, to_name, created_at in rows:
+            lines.append(f"{created_at}: → {to_name}: {reason}" + (f" ({comment})" if comment else ""))
+
+        text = "\n".join(lines)
+        await query.message.reply_text(text, reply_markup=main_menu())
         return

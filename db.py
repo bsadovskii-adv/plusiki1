@@ -16,6 +16,12 @@ def init_db():
         )
     """)
 
+    # Ensure existing installations get the new column when upgrading
+    c.execute("PRAGMA table_info(users)")
+    cols = [row[1] for row in c.fetchall()]
+    if "is_admin" not in cols:
+        c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS telegram_bindings (
             telegram_id INTEGER PRIMARY KEY,
@@ -44,6 +50,15 @@ def init_db():
             item_name TEXT NOT NULL,
             price INTEGER NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS shop_items (
+            item_key TEXT PRIMARY KEY,
+            item_name TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            stock_limit INTEGER
         )
     """)
 

@@ -3,8 +3,8 @@
 import sqlite3
 from config import DB_PATH
 
-# Catalog: key -> (display name, price in pluses, stock limit or None for unlimited)
-CATALOG = {
+# Default seed catalog used on first run (key -> (name, price, stock_limit))
+DEFAULT_CATALOG = {
     "stickerpack": ("Новогодний стикерпак", 3, None),
     "big_sticker": ("Объёмный новогодний стикер", 1, None),
     "mug": ("Новогодняя термокружка", 10, 25),
@@ -12,20 +12,44 @@ CATALOG = {
 }
 
 
+def _ensure_seeded():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM shop_items")
+    count = c.fetchone()[0] or 0
+    if count == 0:
+        for key, (name, price, limit) in DEFAULT_CATALOG.items():
+            c.execute(
+                "INSERT OR IGNORE INTO shop_items (item_key, item_name, price, stock_limit) VALUES (?, ?, ?, ?)",
+                (key, name, price, limit),
+            )
+        conn.commit()
+    conn.close()
+
+
 def get_catalog() -> dict:
-    return CATALOG.copy()
+    _ensure_seeded()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT item_key, item_name, price, stock_limit FROM shop_items")
+    rows = c.fetchall()
+    conn.close()
+    return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
 
 def get_remaining_stock(item_key: str) -> int | None:
     """Get remaining stock for an item. Returns None if unlimited."""
-    if item_key not in CATALOG:
-        return None
-    _, _, limit = CATALOG[item_key]
-    if limit is None:
-        return None
-    
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    c.execute("SELECT stock_limit FROM shop_items WHERE item_key = ?", (item_key,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return None
+    limit = row[0]
+    if limit is None:
+        conn.close()
+        return None
     c.execute("SELECT COUNT(*) FROM purchases WHERE item_key = ?", (item_key,))
     sold = c.fetchone()[0] or 0
     conn.close()
@@ -54,15 +78,16 @@ def get_balance(user_id: int) -> int:
 
 def buy_item(user_id: int, item_key: str) -> tuple[bool, str]:
     """Attempt to buy an item. Returns (success, message)."""
-    if item_key not in CATALOG:
+    catalog = get_catalog()
+    if item_key not in catalog:
         return False, "Товар не найден."
 
-    name, price, limit = CATALOG[item_key]
-    
+    name, price, _ = catalog[item_key]
+
     # Check stock
     if not is_in_stock(item_key):
         return False, f"{name} — закончился товар."
-    
+
     balance = get_balance(user_id)
     if balance < price:
         return False, f"Недостаточно плюсов — нужно {price}, у тебя {balance}."
@@ -89,3 +114,15 @@ def get_user_purchases(user_id: int) -> list[tuple[str, int, str]]:
     rows = c.fetchall()
     conn.close()
     return rows
+
+    def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str]]:
+        """Return list of recent purchases: (user_id, user_name, item_name, price, created_at)"""
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            "SELECT p.user_id, u.name, p.item_name, p.price, p.created_at FROM purchases p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = c.fetchall()
+        conn.close()
+        return rows
