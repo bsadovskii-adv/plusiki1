@@ -366,7 +366,9 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "".join(lines)
 
 
-        await send_long_message(query.message, text, reply_markup=main_menu(), entities=entities)
+        is_admin_user = is_admin(internal_id)
+        menu = admin_menu() if is_admin_user else main_menu()
+        await send_long_message(query.message, text, reply_markup=menu, entities=entities)
         return
 
     # ========= SHOP =========
@@ -476,7 +478,9 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lines.append("")
             text = "\n".join(lines)
 
-        await send_long_message(query.message, text, reply_markup=main_menu())
+        is_admin_user = is_admin(internal_id)
+        menu = admin_menu() if is_admin_user else main_menu()
+        await send_long_message(query.message, text, reply_markup=menu)
         return
 
     # ========= ADMIN: ADD USER =========
@@ -612,8 +616,11 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         rows = get_pluses_given_by_user(internal_id)
+        is_admin_user = is_admin(internal_id)
+        menu = admin_menu() if is_admin_user else main_menu()
+        
         if not rows:
-            await query.message.reply_text("Ты ещё не отправлял плюсики.", reply_markup=main_menu())
+            await query.message.reply_text("Ты ещё не отправлял плюсики.", reply_markup=menu)
             return
 
         lines = []
@@ -621,7 +628,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"{created_at}: → {to_name}: {reason}" + (f" ({comment})" if comment else ""))
 
         text = "\n".join(lines)
-        await send_long_message(query.message, text, reply_markup=main_menu())
+        await send_long_message(query.message, text, reply_markup=menu)
         return
 
     # ========= ADMIN: DELETE USER =========

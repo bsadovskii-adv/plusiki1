@@ -136,7 +136,7 @@ def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT p.user_id, u.name, p.item_name, p.price, p.created_at FROM purchases p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT ?",
+        "SELECT p.user_id, u.name, p.item_name, p.price, p.created_at FROM purchases p JOIN users u ON u.id = p.user_id ORDER BY p.created_at LIMIT ?",
         (limit,),
     )
     rows = c.fetchall()
