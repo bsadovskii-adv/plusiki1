@@ -291,12 +291,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
 
         balance = get_balance(internal_id)
+        entities = []
 
         if not rows:
             text = "У тебя пока нет плюсиков 🙂"
         else:
             lines = []
-            entities = []
 
             emoji_id = "5458840666563970188" 
             current_offset = 0
