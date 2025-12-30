@@ -13,7 +13,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Уже привязан
     internal_id = get_binding_by_telegram_id(tg_id)
-    if internal_id:
+    if internal_id is not None:
         context.user_data["internal_id"] = internal_id
         await update.message.reply_text(
             "С возвращением! 👋",

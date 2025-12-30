@@ -76,7 +76,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("awaiting_custom_reason", None)
         
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if internal_id and is_admin(internal_id):
+        if internal_id is not None and is_admin(internal_id):
             menu = admin_menu()
         else:
             menu = main_menu()
@@ -169,7 +169,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= GIVE PLUS =========
     if data == "give_plus":
         internal_id = get_binding_by_telegram_id(tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -217,14 +217,14 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("Неверный номер страницы.")
                 return
             internal_id = get_or_restore_internal_id(context, tg_id)
-            if not internal_id:
+            if internal_id is None:
                 await query.message.reply_text(
                     "❌ Сначала выбери себя через /start",
                     reply_markup=main_menu(),
                 )
                 return
             users = get_all_users()
-            if internal_id:
+            if internal_id is not None:
                 users = [(uid, name) for uid, name in users if uid != internal_id]
             await query.message.edit_reply_markup(
                 reply_markup=build_users_pagination(
@@ -272,7 +272,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= SKIP COMMENT =========
     if data == "skip_comment":
         internal_id = get_or_restore_internal_id(context, query.from_user.id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "❌ Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -303,7 +303,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= STATUS =========
     if data == "status":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -374,7 +374,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= SHOP =========
     if data == "shop":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -410,7 +410,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("buy:"):
         item_key = data.split(":", 1)[1]
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -436,7 +436,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("confirm_buy:"):
         item_key = data.split(":", 1)[1]
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -460,7 +460,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= PURCHASES =========
     if data == "purchases":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -486,7 +486,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= ADMIN: ADD USER =========
     if data == "admin_add_user":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -501,7 +501,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= ADMIN: ADD / REMOVE ITEMS =========
     if data == "admin_add_item":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -518,7 +518,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_items":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -548,7 +548,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("admin_remove:"):
         key = data.split(":", 1)[1]
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -562,7 +562,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= ADMIN: VIEW ALL PLUSSES =========
     if data == "admin_view_pluses":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -585,7 +585,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= ADMIN: VIEW ALL PURCHASES =========
     if data == "admin_view_purchases":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -608,7 +608,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= GIVEN HISTORY (who I sent pluses to) =========
     if data == "given_history":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id:
+        if internal_id is None:
             await query.message.reply_text(
                 "Сначала выбери себя через /start",
                 reply_markup=main_menu(),
@@ -634,7 +634,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========= ADMIN: DELETE USER =========
     if data == "admin_delete_user":
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ У тебя нет прав администратора.",
                 reply_markup=main_menu(),
@@ -666,7 +666,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("Неверный номер страницы.")
                 return
             internal_id = get_or_restore_internal_id(context, tg_id)
-            if not internal_id or not is_admin(internal_id):
+            if internal_id is None or not is_admin(internal_id):
                 await query.message.reply_text(
                     "❌ Нет прав администратора.",
                     reply_markup=main_menu(),
@@ -708,7 +708,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         internal_id = get_or_restore_internal_id(context, tg_id)
-        if not internal_id or not is_admin(internal_id):
+        if internal_id is None or not is_admin(internal_id):
             await query.message.reply_text(
                 "❌ Нет прав администратора.",
                 reply_markup=main_menu(),

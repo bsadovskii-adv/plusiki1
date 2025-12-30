@@ -13,11 +13,11 @@ def get_or_restore_internal_id(context, telegram_id: int) -> int | None:
     """
 
     internal_id = context.user_data.get("internal_id")
-    if internal_id:
+    if internal_id is not None:
         return internal_id
 
     internal_id = get_binding_by_telegram_id(telegram_id)
-    if internal_id:
+    if internal_id is not None:
         context.user_data["internal_id"] = internal_id
         return internal_id
 
