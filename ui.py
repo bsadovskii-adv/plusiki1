@@ -76,6 +76,7 @@ def admin_menu():
         [InlineKeyboardButton("📜 Моя история", callback_data="given_history")],
         [InlineKeyboardButton("📊 Мой статус", callback_data="status")],
         [InlineKeyboardButton("👤 Добавить пользователя", callback_data="admin_add_user")],
+        [InlineKeyboardButton("👥 Удалить пользователя", callback_data="admin_delete_user")],
         [InlineKeyboardButton("➕ Добавить товар", callback_data="admin_add_item")],
         [InlineKeyboardButton("🗑️ Удалить товар", callback_data="admin_items")],
         [InlineKeyboardButton("📑 Все плюсики", callback_data="admin_view_pluses")],

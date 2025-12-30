@@ -69,6 +69,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ========= BACK =========
     if data == "back":
+        # Очищаем все флаги ожидания ввода
+        context.user_data.pop("awaiting_new_user_name", None)
+        context.user_data.pop("awaiting_new_item", None)
+        context.user_data.pop("awaiting_comment_text", None)
+        context.user_data.pop("awaiting_custom_reason", None)
+        
         internal_id = get_or_restore_internal_id(context, tg_id)
         if internal_id and is_admin(internal_id):
             menu = admin_menu()
@@ -499,8 +505,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         context.user_data["awaiting_new_item"] = True
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back")]]
         await query.message.reply_text(
-            "🛒 Отправь данные товара в формате: key;name;price;stock(или пусто для неограниченного)\nПример: mug2;Моя кружка;10;5"
+            "🛒 Отправь данные товара в формате: key;name;price;stock(или пусто для неограниченного)\nПример: mug2;Моя кружка;10;5",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
 
@@ -614,4 +622,106 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = "\n".join(lines)
         await send_long_message(query.message, text, reply_markup=main_menu())
+        return
+
+    # ========= ADMIN: DELETE USER =========
+    if data == "admin_delete_user":
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ У тебя нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        users = get_all_users()
+        if not users:
+            await query.message.reply_text("Список пользователей пуст.", reply_markup=admin_menu())
+            return
+
+        await query.message.reply_text(
+            "👥 Выбери пользователя для удаления:",
+            reply_markup=build_users_pagination(
+                users=users, page=0, action="delete_user", show_back_to_menu=True
+            ),
+        )
+        return
+
+    # ========= DELETE USER (with pagination support) =========
+    if data.startswith("delete_user:"):
+        parts = data.split(":")
+
+        # pagination: delete_user:page:N
+        if len(parts) >= 3 and parts[1] == "page":
+            try:
+                page = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный номер страницы.")
+                return
+            internal_id = get_or_restore_internal_id(context, tg_id)
+            if not internal_id or not is_admin(internal_id):
+                await query.message.reply_text(
+                    "❌ Нет прав администратора.",
+                    reply_markup=main_menu(),
+                )
+                return
+            users = get_all_users()
+            await query.message.edit_reply_markup(
+                reply_markup=build_users_pagination(
+                    users=users, page=page, action="delete_user", show_back_to_menu=True
+                )
+            )
+            return
+
+        # delete_user:user:ID
+        if len(parts) >= 3 and parts[1] == "user":
+            try:
+                user_id = int(parts[2])
+            except ValueError:
+                await query.message.reply_text("Неверный пользователь.")
+                return
+
+            user_name = get_user_name(user_id)
+            keyboard = [
+                [InlineKeyboardButton("✅ Да, удалить", callback_data=f"confirm_delete_user:{user_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="back")],
+            ]
+
+            await query.message.reply_text(
+                f"Удалить пользователя '{user_name}'?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+            return
+
+    if data.startswith("confirm_delete_user:"):
+        try:
+            user_id = int(data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            await query.message.reply_text("Ошибка при удалении.")
+            return
+
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if not internal_id or not is_admin(internal_id):
+            await query.message.reply_text(
+                "❌ Нет прав администратора.",
+                reply_markup=main_menu(),
+            )
+            return
+
+        user_name = get_user_name(user_id)
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        # Удаляем привязку если есть
+        c.execute("DELETE FROM telegram_bindings WHERE user_id = ?", (user_id,))
+        # Удаляем самого пользователя
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+        conn.commit()
+        conn.close()
+
+        await query.message.reply_text(
+            f"✅ Пользователь '{user_name}' удалён.",
+            reply_markup=admin_menu(),
+        )
         return
