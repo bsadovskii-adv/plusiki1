@@ -137,3 +137,26 @@ def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str
     rows = c.fetchall()
     conn.close()
     return rows
+
+
+def get_all_items() -> list[tuple[str, str, int, int | None]]:
+    """Get all shop items. Returns list of (item_key, item_name, price, stock_limit)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT item_key, item_name, price, stock_limit FROM shop_items ORDER BY item_name")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str]]:
+    """Return list of recent purchases: (user_id, user_name, item_name, price, created_at)"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT p.user_id, u.name, p.item_name, p.price, p.created_at FROM purchases p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT ?",
+        (limit,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
