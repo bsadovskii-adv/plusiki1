@@ -98,7 +98,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "confirm_self":
         user_id = context.user_data.get("pending_self_id")
-        if not user_id:
+        if user_id is None:
             await query.message.reply_text("Ошибка. Начни заново.")
             return
 
