@@ -32,14 +32,15 @@ def get_pluses_given_by_user(user_id: int) -> list[tuple[str, str, str]]:
 
 
 def get_recent_pluses(limit: int = 100) -> list[tuple[int, str, int, str, str]]:
-    """Return recent pluses: (from_id, from_name, to_id, to_name, created_at, reason, comment)
-    Ordered from oldest to newest (ASC) to show oldest at top."""
+    """Return 100 most recent pluses ordered from oldest to newest (ASC).
+    This fetches the newest 100 and displays them with oldest at top."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT p.from_id, fu.name, p.to_id, tu.name, p.reason, p.comment, p.created_at FROM pluses p JOIN users fu ON fu.id = p.from_id JOIN users tu ON tu.id = p.to_id ORDER BY p.created_at ASC LIMIT ?",
+        "SELECT p.from_id, fu.name, p.to_id, tu.name, p.reason, p.comment, p.created_at FROM pluses p JOIN users fu ON fu.id = p.from_id JOIN users tu ON tu.id = p.to_id ORDER BY p.created_at DESC LIMIT ?",
         (limit,),
     )
     rows = c.fetchall()
     conn.close()
-    return rows
+    # Reverse to show oldest first (from the 100 most recent)
+    return list(reversed(rows))
