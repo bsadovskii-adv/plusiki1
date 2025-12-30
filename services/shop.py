@@ -139,6 +139,43 @@ def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str
     return rows
 
 
+def add_item(item_key: str, item_name: str, price: int, stock_limit: int | None) -> tuple[bool, str]:
+    """Add or update a shop item. Returns (success, message)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT INTO shop_items (item_key, item_name, price, stock_limit) VALUES (?, ?, ?, ?) ON CONFLICT(item_key) DO UPDATE SET item_name=excluded.item_name, price=excluded.price, stock_limit=excluded.stock_limit",
+            (item_key, item_name, price, stock_limit),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return False, f"Ошибка при добавлении товара: {e}"
+    conn.close()
+    return True, f"Товар '{item_name}' ({item_key}) добавлен или обновлён."
+
+
+def remove_item(item_key: str) -> tuple[bool, str]:
+    """Remove a shop item by key. Returns (success, message)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT item_name FROM shop_items WHERE item_key = ?", (item_key,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return False, "Товар не найден."
+    item_name = row[0]
+    try:
+        c.execute("DELETE FROM shop_items WHERE item_key = ?", (item_key,))
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return False, f"Ошибка при удалении товара: {e}"
+    conn.close()
+    return True, f"Товар '{item_name}' ({item_key}) удалён."
+
+
 def get_all_items() -> list[tuple[str, str, int, int | None]]:
     """Get all shop items. Returns list of (item_key, item_name, price, stock_limit)."""
     conn = sqlite3.connect(DB_PATH)
