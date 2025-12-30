@@ -37,6 +37,30 @@ def _utf16_len(s: str) -> int:
     return len(s.encode("utf-16-le")) // 2
 
 
+async def send_long_message(message, text: str, reply_markup=None, entities=None, chunk_size: int = 4000):
+    """Send `text` in chunks to avoid Telegram 'Message is too long' errors.
+
+    - `message` is a `telegram.Message` (we call its `reply_text`).
+    - `reply_markup` is attached only to the last chunk.
+    - `entities` are attached only to the first chunk (if provided).
+    """
+    if not text:
+        return
+    start = 0
+    length = len(text)
+    first = True
+    while start < length:
+        end = min(start + chunk_size, length)
+        chunk = text[start:end]
+        # attach entities to first chunk only
+        if first:
+            await message.reply_text(chunk, reply_markup=(reply_markup if end >= length else None), entities=entities)
+            first = False
+        else:
+            await message.reply_text(chunk, reply_markup=(reply_markup if end >= length else None))
+        start = end
+
+
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -331,7 +355,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "".join(lines)
 
 
-        await query.message.reply_text(text, entities=entities, reply_markup=main_menu())
+        await send_long_message(query.message, text, reply_markup=main_menu(), entities=entities)
         return
 
     # ========= SHOP =========
@@ -367,7 +391,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
 
         text = "\n".join(lines)
-        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await send_long_message(query.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     if data.startswith("buy:"):
@@ -441,7 +465,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lines.append("")
             text = "\n".join(lines)
 
-        await query.message.reply_text(text, reply_markup=main_menu())
+        await send_long_message(query.message, text, reply_markup=main_menu())
         return
 
     # ========= ADMIN: ADD USER =========
@@ -500,7 +524,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back")])
         text = "\n".join(lines)
-        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await send_long_message(query.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     if data.startswith("admin_remove:"):
@@ -537,7 +561,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"{created_at}: {from_name} → {to_name}: {reason}" + (f" ({comment})" if comment else ""))
 
         text = "\n".join(lines)
-        await query.message.reply_text(text, reply_markup=admin_menu())
+        await send_long_message(query.message, text, reply_markup=admin_menu())
         return
 
     # ========= ADMIN: VIEW ALL PURCHASES =========
@@ -560,7 +584,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"{created_at}: {user_name} купил {item_name} за {price} плюсов")
 
         text = "\n".join(lines)
-        await query.message.reply_text(text, reply_markup=admin_menu())
+        await send_long_message(query.message, text, reply_markup=admin_menu())
         return
 
     # ========= GIVEN HISTORY (who I sent pluses to) =========
@@ -583,5 +607,5 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"{created_at}: → {to_name}: {reason}" + (f" ({comment})" if comment else ""))
 
         text = "\n".join(lines)
-        await query.message.reply_text(text, reply_markup=main_menu())
+        await send_long_message(query.message, text, reply_markup=main_menu())
         return
