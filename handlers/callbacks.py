@@ -69,7 +69,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ========= BACK =========
     if data == "back":
-        await query.message.reply_text("Главное меню:", reply_markup=main_menu())
+        internal_id = get_or_restore_internal_id(context, tg_id)
+        if internal_id and is_admin(internal_id):
+            menu = admin_menu()
+        else:
+            menu = main_menu()
+        await query.message.reply_text("Главное меню:", reply_markup=menu)
         return
 
     # ========= SELECT SELF (with pagination support) =========
