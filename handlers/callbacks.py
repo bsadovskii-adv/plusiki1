@@ -484,7 +484,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         context.user_data["awaiting_new_user_name"] = True
-        await query.message.reply_text("👤 Напиши имя нового пользователя")
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back")]]
+        await query.message.reply_text("👤 Напиши имя нового пользователя", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     # ========= ADMIN: ADD / REMOVE ITEMS =========
