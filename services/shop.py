@@ -39,6 +39,7 @@ def get_catalog() -> dict:
 
 def get_remaining_stock(item_key: str) -> int | None:
     """Get remaining stock for an item. Returns None if unlimited."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT stock_limit FROM shop_items WHERE item_key = ?", (item_key,))
@@ -66,6 +67,7 @@ def is_in_stock(item_key: str) -> bool:
 
 def get_balance(user_id: int) -> int:
     """Calculate user's balance: received pluses minus spent pluses."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM pluses WHERE to_id = ?", (user_id,))
@@ -105,6 +107,7 @@ def buy_item(user_id: int, item_key: str) -> tuple[bool, str]:
 
 def get_user_purchases(user_id: int) -> list[tuple[str, int, str]]:
     """Get all purchases for a user. Returns list of (item_name, price, created_at)."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
@@ -118,6 +121,7 @@ def get_user_purchases(user_id: int) -> list[tuple[str, int, str]]:
 
 def get_all_items() -> list[tuple[str, str, int, int | None]]:
     """Get all shop items. Returns list of (item_key, item_name, price, stock_limit)."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT item_key, item_name, price, stock_limit FROM shop_items ORDER BY item_name")
@@ -128,6 +132,7 @@ def get_all_items() -> list[tuple[str, str, int, int | None]]:
 
 def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str]]:
     """Return list of recent purchases: (user_id, user_name, item_name, price, created_at)"""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
@@ -141,6 +146,7 @@ def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str
 
 def add_item(item_key: str, item_name: str, price: int, stock_limit: int | None) -> tuple[bool, str]:
     """Add or update a shop item. Returns (success, message)."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
@@ -158,6 +164,7 @@ def add_item(item_key: str, item_name: str, price: int, stock_limit: int | None)
 
 def remove_item(item_key: str) -> tuple[bool, str]:
     """Remove a shop item by key. Returns (success, message)."""
+    _ensure_seeded()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT item_name FROM shop_items WHERE item_key = ?", (item_key,))
@@ -174,26 +181,3 @@ def remove_item(item_key: str) -> tuple[bool, str]:
         return False, f"Ошибка при удалении товара: {e}"
     conn.close()
     return True, f"Товар '{item_name}' ({item_key}) удалён."
-
-
-def get_all_items() -> list[tuple[str, str, int, int | None]]:
-    """Get all shop items. Returns list of (item_key, item_name, price, stock_limit)."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT item_key, item_name, price, stock_limit FROM shop_items ORDER BY item_name")
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-def get_recent_purchases(limit: int = 100) -> list[tuple[int, str, str, int, str]]:
-    """Return list of recent purchases: (user_id, user_name, item_name, price, created_at)"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "SELECT p.user_id, u.name, p.item_name, p.price, p.created_at FROM purchases p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT ?",
-        (limit,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return rows
